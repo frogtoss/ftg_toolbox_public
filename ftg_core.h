@@ -1,8 +1,7 @@
-/* clang-format off */
 /* ftg_core.h - Frogtoss Toolbox.  Public domain-like license below.
 
-   ftg libraries are copyright (C) 2015-2021 Frogtoss Games, Inc.
-   http://github.com/mlabbe/ftg_toolbox
+   ftg libraries are copyright (C) 2015-2023 Frogtoss Games, Inc.
+   https://github.com/frogtoss/ftg_toolbox_public
    
    ftg header files are single file header files intended to be useful
    in C/C++.  ftg_core contains generally useful functions
