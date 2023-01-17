@@ -5,7 +5,7 @@ Single C file libraries for C or C++, written by Frogtoss Games, and made public
 
 ## ftg_bitbuffer ##
 
-[ftg_bitbuffer.h](github.com/frogtoss/ftg_toolbox_public/blob/main/ftg_bitbuffer.h)
+[ftg_bitbuffer.h](https://github.com/frogtoss/ftg_toolbox_public/blob/main/ftg_bitbuffer.h)
 
 Tightly pack values by bits into a stream of bytes for reading / writing.
 
