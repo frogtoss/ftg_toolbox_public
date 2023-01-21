@@ -43,6 +43,7 @@
    REVISION HISTORY
 
    1.0  2023-01-17   Initial version
+   1.1  2023-01-20   Significant bugfix on read
 
    USAGE NOTIFICATION REQUEST
 
@@ -517,8 +518,6 @@ bitbuf__bits_remaining_for_cursor(const bitbuf_buffer_t* buffer,
     BITBUF__ASSERT(remaining_segs >= 0);
 
     int remaining_bits = BITBUF__SEG_BITS - cursor->bits_into_seg;
-    BITBUF__ASSERT(remaining_bits >= 0);
-    remaining_bits = remaining_bits ? remaining_segs > 0 : 0;
 
     return (remaining_segs * BITBUF__SEG_BITS) + remaining_bits;
 }
@@ -933,6 +932,7 @@ bitbuf__test_buffer_overflow(void)
         TEST(value == 0xFF);
 
         // read past end
+        bitbuf_read_uint64(&read);
         value = bitbuf_read_uint64(&read);
         TEST(read.read_past_end == 1);
         TEST(ftgt_test_errorlevel());
@@ -940,7 +940,6 @@ bitbuf__test_buffer_overflow(void)
 
         bitbuf_free_buffer(&buf);
     }
-
 
     return ftgt_test_errorlevel();
 }
@@ -1138,3 +1137,45 @@ bitbuf_decl_suite(void)
 #endif /* FTGT_TESTS_ENABLED */
 
 #endif /* defined(BITBUF_IMPLEMENT_BITBUFFER) */
+
+/*
+------------------------------------------------------------------------------
+This software is available under 2 licenses -- choose whichever you prefer.
+------------------------------------------------------------------------------
+ALTERNATIVE A - MIT License
+Copyright (c) 2019 Sean Barrett
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies
+of the Software, and to permit persons to whom the Software is furnished to do
+so, subject to the following conditions:
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+------------------------------------------------------------------------------
+ALTERNATIVE B - Public Domain (www.unlicense.org)
+This is free and unencumbered software released into the public domain.
+Anyone is free to copy, modify, publish, use, compile, sell, or distribute this
+software, either in source code form or as a compiled binary, for any purpose,
+commercial or non-commercial, and by any means.
+In jurisdictions that recognize copyright laws, the author or authors of this
+software dedicate any and all copyright interest in the software to the public
+domain. We make this dedication for the benefit of the public at large and to
+the detriment of our heirs and successors. We intend this dedication to be an
+overt act of relinquishment in perpetuity of all present and future rights to
+this software under copyright law.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+------------------------------------------------------------------------------
+*/
