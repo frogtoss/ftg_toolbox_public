@@ -44,6 +44,7 @@
 
    1.0  2023-01-17   Initial version
    1.1  2023-01-20   Significant bugfix on read
+   1.11 2023-01-24   Fix missing header file error
 
    USAGE NOTIFICATION REQUEST
 
@@ -118,9 +119,8 @@
 // bitbuf_free_buffer(&buf);
 
 #include <inttypes.h>
-#include <stdlib.h>
-#include <string.h>
 #include <stdbool.h>
+#include <stddef.h>
 
 #if defined(__GNUC__) || defined(__clang__)
 #    define BITBUF_EXT_unused __attribute__((unused))
@@ -323,6 +323,9 @@ BITBUFDEF bitbuf_buffer_t bitbuf_init_buffer_with_bytes(const uint8_t* bytes,
 
 /* implementation */
 #if defined(FTG_IMPLEMENT_BITBUFFER)
+
+#include <stdlib.h>
+#include <string.h>
 
 #define BITBUF__SEG_BITS 64
 
