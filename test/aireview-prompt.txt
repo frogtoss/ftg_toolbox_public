@@ -1,0 +1,11 @@
+Please review these files for typical C-style coding errors:
+
+ - off by one
+ - buffer overflows
+ - use before initialization
+ - memory stomps
+
+Make code fixes where applicable.  For every code fix, provide in-line
+comments near code changes that: a) explain in depth what the bug was,
+b) how to reproduce the bug, and c) your confidence level that there
+was a bug in the first place.
