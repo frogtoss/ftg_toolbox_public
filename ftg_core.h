@@ -1,17 +1,17 @@
 /* ftg_core.h - Frogtoss Toolbox.  Public domain-like license below.
 
-   ftg libraries are copyright (C) 2015-2023 Frogtoss Games, Inc.
+   ftg libraries are copyright (C) 2015-2025 Frogtoss Games, Inc.
    https://github.com/frogtoss/ftg_toolbox_public
-   
+
    ftg header files are single file header files intended to be useful
    in C/C++.  ftg_core contains generally useful functions
-   
+
    Special thanks to STB for the inspiration.
 
 
    ****
    You must
-   
+
      #define FTG_IMPLEMENT_CORE
 
    in exactly one C or C++ file.
@@ -29,7 +29,7 @@
    5. define FTG_DISABLE_BRIEF_TYPES to avoid u8, i8, etc.
 
    PURPOSE
-   
+
    ftg_core.h contains common routines and aims to smooth over the
    differences between compilers and their libraries.  It is tested on
    Visual C++ 98 (c89), Visual Studio 2015 (roughly c99), modern Clang
@@ -37,7 +37,24 @@
 
    It also contains a grab bag of commonly-useful routines and is
    somewhat unfocused.
-   
+
+   MISSING HEADERS
+
+   It's possible to include ftg_core to have defines without including
+   any c stdlib functions.  ftg_core cannot be implemented without stdlib.
+
+    - FTG_CORE_NO_STDLIB: same as defining all of the below
+      individually, but also removes additional functions from
+      other headers
+
+    - FTG_CORE_NO_STDIO: don't define or compile in anything that depends on
+      streams
+
+    - FTG_CORE_NO_STDBOOL: define stdbool in ftg_core instead
+
+    - FTG_CORE_NO_STDINT: best guess at defining int types
+
+    - FTG_CORE_NO_ASSERT: no assert() macro
 
    SELF-TESTING
 
@@ -56,6 +73,8 @@
 
 
    Version history
+   1.0              include compatible with -nostdint
+   0.9              static array macros
    0.8              ftg_strto* wrappers
    0.7              simple arena allocator
    0.6              windows console alloc/free
@@ -82,6 +101,13 @@
 #ifndef FTG__INCLUDE_CORE_H
 #define FTG__INCLUDE_CORE_H
 
+#ifdef FTG_CORE_NO_STDLIB
+#  define FTG_CORE_NO_STDIO
+#  define FTG_CORE_NO_STDBOOL
+#  define FTG_CORE_NO_STDINT
+#  define FTG_CORE_NO_ASSERT
+#endif
+
 #if defined(_WIN32) && !defined(__MINGW32__)
 #  ifndef _CRT_SECURE_NO_WARNINGS
 #     define _CRT_SECURE_NO_WARNINGS
@@ -90,8 +116,6 @@
 
 #ifndef FTG_CORE_NO_STDIO
 #  include <stdio.h>
-#else
-#  include <stddef.h>  // for size_t
 #endif
 
 /* for off64_t */
@@ -114,9 +138,10 @@
 
 
 /* broad test for OSes that are vaguely POSIX compliant */
-#if defined(__linux__) || defined(__APPLE__) || defined(ANDROID) || \
-    defined(TARGET_OS_IPHONE) || defined(TARGET_IPHONE_SIMULATOR) || \
-    defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__EMSCRIPTEN__)
+#if defined(__linux__) || defined(__APPLE__) || defined(ANDROID) ||            \
+defined(TARGET_OS_IPHONE) || defined(TARGET_IPHONE_SIMULATOR) ||           \
+defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__EMSCRIPTEN__) || \
+defined(__wasm__)
 #  define FTG_POSIX_LIKE 1
 #endif
 
@@ -198,16 +223,15 @@
 #endif
 
 /* ftg_off_t printing */
-#ifndef FTG_CORE_NO_STDIO
 #  define FTG_SPEC_OFF_T     FTG_SPEC_INT64
-#endif
 
 /* octal directory creation mode for posix-like OSes; override if needed */
 #ifndef FTG_DIRECTORY_MODE
 #  define FTG_DIRECTORY_MODE 0750
 #endif
 
-#if defined(_MSC_VER) && (_MSC_VER >= 1800)
+
+#if defined(_MSC_VER) && (_MSC_VER >= 1800) && !defined(__clang__)
 // VS doesn't define STDC_VERSION because it isn't fully compliant, but this
 // actually lets us compile code that we couldn't without it.
 #  if !defined(__STDC_VERSION__) && !defined(__cplusplus)
@@ -220,6 +244,13 @@
 #  ifndef __cplusplus
 #    pragma warning(disable : 4204)
 #  endif
+#endif
+
+// Disable conditional expression is constant warning, which is
+// incompatible with macros that generate constant conditionals
+// sometimes.
+#if defined(_MSC_VER)
+#  pragma warning( disable: 4127 )
 #endif
 
 #if __STDC_VERSION__ < 199901L
@@ -249,7 +280,7 @@
         #else
           #define FTG_BREAK() __asm__("int $0x3");
         #endif
-    #elif defined(TARGET_OS_MAC) && defined(__LITTLE_ENDIAN__)
+    #elif defined(TARGET_OS_MAC)
         #define FTG_BREAK() __builtin_trap();
     #elif defined(ANDROID)
         #define FTG_BREAK() __android_log_assert("breakpoint()", "ftg", "breakpoint");
@@ -261,23 +292,25 @@
         #else
             asm("trap");
         #endif
-    #else
+    #elif !defined(FTG_CORE_NO_ASSERT)
         #include <assert.h>
         #define FTG_BREAK() assert(0)
+    #elif defined(__wasm__)
+        #define FTG_BREAK() __builtin_trap();                                                             
+    #else
+        #define FTG_BREAK()
     #endif
 #endif
 
 /* Make true/false/bool universal macros */
-#ifndef __cplusplus
-    #if __STDC_VERSION__ < 199901L
-        #if !__bool_true_false_are_defined
-            #define true 1
-            #define false 0
-            #define bool int
-        #endif
-    #else
-        #include <stdbool.h>
+#if defined(FTG_CORE_NO_STDBOOL) || (!defined(__cplusplus) && __STDC_VERSION__ < 199901L)
+    #if !__bool_true_false_are_defined
+        #define true 1
+        #define false 0
+        #define bool _Bool
     #endif
+#else
+    #include <stdbool.h>
 #endif
 
 /* assert
@@ -315,6 +348,25 @@ Alternatively, undef it to use system assert.
 #define FTG_ASSERT_ALWAYS(exp) \
     { if (!(exp) && FTG_CUSTOM_ASSERT_REPORTER(#exp, __FILE__, FTG_FUNC, __LINE__)) FTG_BREAK(); }
 
+// FTG_UNREACHABLE does an assert and then declares code unreachable.
+// In release, it is ub to reach that statement, so use it sparingly.
+
+#if defined(_MSC_VER)
+#  define FTG__UNREACHABLE_STMT __assume(0)
+#elif defined(__GNUC__) || defined(__clang__)
+#  define FTG__UNREACHABLE_STMT __builtin_unreachable()
+#else
+#  define FTG__UNREACHABLE_STMT
+#endif
+
+
+#if FTG_DEBUG
+#  define FTG_UNREACHABLE do { FTG_ASSERT_FAIL(__FILE__ ": unreachable"); FTG__UNREACHABLE_STMT; } while (0)
+#else
+#  define FTG_UNREACHABLE FTG__UNREACHABLE_STMT
+#endif
+
+#define FTG_UNIMPLEMENTED FTG_ASSERT_ALWAYS(!"not implemented")
 
 /* static assert */
 
@@ -323,11 +375,8 @@ Alternatively, undef it to use system assert.
 #define FTG__STATIC_ASSERT_2(x,L) FTG__STATIC_ASSERT_3(x,L)
 #define FTG_STATIC_ASSERT(x) FTG__STATIC_ASSERT_2(x,__LINE__)
 
-/* int types */
-#if (defined(_MSC_VER) && (_MSC_VER >= 1800)) || defined (__GNUC__) || defined(__clang__)
-#  include <stdint.h>
-#  include <stddef.h>
-#else
+
+#if defined(FTG_CORE_NO_STDINT) || (defined(_MSC_VER) && (_MSC_VER < 1800))
 typedef unsigned char      uint8_t;
 typedef signed char        int8_t;
 typedef unsigned short     uint16_t;
@@ -335,32 +384,50 @@ typedef signed short       int16_t;
 typedef unsigned int       uint32_t;
 typedef signed int         int32_t;
 
-#if FTG_BITS == 32
-typedef unsigned int       uintptr_t;
-typedef int                intptr_t;
-#else
-typedef unsigned long int  uintptr_t;
-typedef long int           intptr_t;
-#endif
-
 #  if defined(_MSC_VER)
 typedef unsigned __int64   uint64_t;
 typedef signed __int64     int64_t;
+#  elif defined(__GNUC__)
+// gcc and clang define these types, and if they are defined to values
+// that are already defined then it can be silently matched as long as
+// -Wno-unused-local-typedef is used.
+typedef __UINT64_TYPE__ uint64_t;
+typedef __INT64_TYPE__ int64_t;
 
-#  if FTG_BITS == 64
-#    define SIZE_MAX		(18446744073709551615UL)
-#  else
-#    define SIZE_MAX		(4294967295U)
-#  endif
-
-#  else
+typedef __SIZE_TYPE__ uintptr_t;
+    
+#else
+// fallback -- may conflict with toolchain definitions
 typedef unsigned long long uint64_t;
 typedef signed long long   int64_t;
 #  endif
+
+
+//
+// size_t without stddef.h
+#ifdef __SIZE_TYPE__
+typedef __SIZE_TYPE__ size_t;
+#elif _MSC_VER
+#  if FTG_BITS == 64
+typedef unsigned __int64 size_t;
+#  else
+typedef unsigned int size_t;
+#  endif
+#else // fallback
+#  if FTG_BITS == 64
+typedef unsigned long long size_t;
+#  else
+typedef unsigned int size_t;
+#  endif
 #endif
 
-#ifndef FTG_DISABLE_BRIEF_TYPES
-#  define FTG_HAS_BRIEF_TYPES
+
+#else
+#   include <stdint.h>
+#endif
+
+#if !defined(FTG_DISABLE_BRIEF_TYPES) && !defined(FTG_HAS_BRIEF_TYPES)
+#define FTG_HAS_BRIEF_TYPES
 typedef int8_t    i8;
 typedef int16_t   i16;
 typedef int32_t   i32;
@@ -371,8 +438,13 @@ typedef uint32_t  u32;
 typedef uint64_t  u64;
 typedef float     f32;
 typedef double    f64;
-typedef size_t    usize;
-typedef ptrdiff_t isize;
+
+typedef size_t usize;
+#ifndef FTG_CORE_NO_STDINT
+// if not inccluding stdint, these types are not included by ftg_core.
+// include ftg_types.h first
+typedef uintptr_t uptr;
+#endif
 
 FTG_STATIC_ASSERT(sizeof(i8) == 1);
 FTG_STATIC_ASSERT(sizeof(i16) == 2);
@@ -384,9 +456,115 @@ FTG_STATIC_ASSERT(sizeof(u32) == 4);
 FTG_STATIC_ASSERT(sizeof(u64) == 8);
 FTG_STATIC_ASSERT(sizeof(f32) == 4);
 FTG_STATIC_ASSERT(sizeof(f64) == 8);
-FTG_STATIC_ASSERT(sizeof(isize) == sizeof(usize));
+#ifndef FTG_CORE_NO_STDINT
+FTG_STATIC_ASSERT(sizeof(intptr_t) == sizeof(usize));
+FTG_STATIC_ASSERT(sizeof(uintptr_t) == sizeof(usize));
+#endif
 #endif
 
+#if FTG_DEBUG
+#define FTG__CAPACITY_FIELD size_t capacity;
+#define FTG__CAPACITY_APPEND_STATIC_ARRAY(A) FTG_ASSERT((A).count <= (A).capacity);
+#define FTG__ASSERT_CAPACITY(A) (A)->count < (A)->capacity
+#define FTG__INIT_STATIC_ARRAY_CAPACITY(A, N) (A).capacity = (N);
+#define FTG__STATIC_INITIALIZE_VALUE(P, SZ, N) memset((P), FTG_NOINIT_8, (SZ) * (N));
+#else
+#define FTG__CAPACITY_FIELD
+#define FTG__CAPACITY_APPEND_STATIC_ARRAY(A)
+#define FTG__ASSERT_CAPACITY(A) 1
+#define FTG__INIT_STATIC_ARRAY_CAPACITY(A, N)
+#define FTG__STATIC_INITIALIZE_VALUE(P, SZ, N)
+#endif
+
+
+// use instead of zero filling memory in debug
+#define FTG_NOINIT_8 0xCD
+#define FTG_NOINIT_16 0xCDCD
+#define FTG_NOINIT_32 0xCDCDCDCDu
+#define FTG_NOINIT_64 0xCDCDCDCDCDCDCDCDull
+
+
+/* static arrays
+
+   Not a whole lot of magic here, but it is helpful to have a
+   typed convention in larger codebases.
+
+   This offers a few benefits over just declaring static arrays:
+    - Element counter is typed, named, and grouped by struct
+    - Capacity checking in debug with assert overflow
+    - Wrapping in struct means array size is part of type
+    - Don't decompose array to a ptr on passing to functions
+
+   usually declared like:
+
+   int some_array[MAX_INTS];
+   usize num_ints;
+
+   Instead, declare them as a small struct with count and ptr, and for
+   debug purposes, capacity.
+
+
+   this creates a type called array_int which holds 10 ints:
+   FTG_STATIC_ARRAY_DECL(int, 10);
+
+
+   want another int type in the same TU?
+   this creates array_index_int:
+   FTG_STATIC_ARRAY_NAMED_DECL(int, index, 50);
+
+   zero the count, assigning capacity:
+   FTG_STATIC_ARRAY_INIT(some_array, 10)
+
+   Add add an element to the end of the array, asserting on capacity
+   overflow in debug:
+   FTG_STATIC_ARRAY_APPEND(A, some_element)
+
+   Check if the array is populated:
+   FTG_STATIC_ARRAY_ASSERT(&A)
+
+   Remove 5 elements from an array, starting from index 3, shifting
+   the elements as needed
+   FTG_STATIC_ARRAY_REMOVE(A, 5, 3);
+ */
+
+
+/* uniform static array type */
+#define FTG_STATIC_ARRAY_DECL(T, N)             \
+    typedef struct array_##T {                  \
+        T ptr[(N)];                             \
+        size_t count;                           \
+        FTG__CAPACITY_FIELD \
+    } array_##T;
+
+// as above, but produce with a name attached
+// useful to produce a second T with a different N
+#define FTG_STATIC_ARRAY_NAMED_DECL(T, NAME, N)  \
+    typedef struct array_##NAME  {               \
+        T ptr[(N)];                              \
+        size_t count;                            \
+        FTG__CAPACITY_FIELD                      \
+    } array_##NAME;
+
+
+#define FTG_STATIC_ARRAY_ASSERT(A)                                      \
+    FTG_ASSERT((A) && (A)->ptr && (A)->count > 0 && FTG_ASSERT_CAPACITY(A));
+
+#define FTG_STATIC_ARRAY_APPEND(A, E)           \
+    (A).ptr[(A).count++] = (E);                 \
+    FTG__CAPACITY_APPEND_STATIC_ARRAY(A)
+
+#define FTG_STATIC_ARRAY_INIT(A, N) \
+    (A).count = 0;                                                  \
+    FTG__INIT_STATIC_ARRAY_CAPACITY(A, N);                          \
+    FTG__STATIC_INITIALIZE_VALUE((A).ptr, sizeof(*(A).ptr), N);
+
+#define FTG_STATIC_ARRAY_REMOVE(A, N, I)                                \
+    FTG_ASSERT((N) > 0);                                                \
+    FTG_ASSERT((size_t)(I) < (A).count);                                \
+    FTG_ASSERT((size_t)(I) + (size_t)(N) <= (A).count);                 \
+    memmove((A).ptr + (I), (A).ptr + (I) + (N), sizeof(*(A).ptr) * ((A).count - (N) - (I))); \
+    (A).count -= (N);                                                   \
+    FTG__STATIC_INITIALIZE_VALUE((A).ptr + (A).count, sizeof(*(A).ptr), (N));
 
 
 /* portable 64-bit offset types
@@ -394,12 +572,11 @@ FTG_STATIC_ASSERT(sizeof(isize) == sizeof(usize));
     on all OSes.
     ftg_fopen, ftg_ftell, etc. all operate on 64-bit values.
     */
-#ifndef FTG_CORE_NO_STDIO
 
 struct ftg_dirhandle_s;
 typedef struct ftg_dirhandle_s ftg_dirhandle_t;
 
-
+#ifndef FTG_CORE_NO_STDIO
 #if defined(__APPLE__)
 #  define FTG_IO64_EXPLICIT 0
 #  if _FILE_OFFSET_BITS == 64 || defined(__LP64__)
@@ -438,17 +615,26 @@ typedef struct ftg_dirhandle_s ftg_dirhandle_t;
 #    endif
 #  endif
 #elif defined(_WIN32)
-typedef int64_t            ftg_off_t;
-typedef wchar_t            ftg_wchar_t;
+typedef ptrdiff_t            ftg_off_t;
 #elif defined(__FreeBSD__) || defined(__OpenBSD__)
 typedef off_t         ftg_off_t;
 #elif defined(FTG_WASM)
-typedef off_t ftg_off_t;
+typedef size_t ftg_off_t;
+#endif
 #endif
 
-FTG_STATIC_ASSERT(sizeof(ftg_off_t)==8);
+#if defined(_WIN32) && !defined(FTG_CORE_NO_STDIO)
+#include <wchar.h>
+typedef wchar_t            ftg_wchar_t;
+#endif
 
-#endif /* !FTG_CORE_NO_STDIO */
+#if !defined(FTG_CORE_NO_STDIO)
+#  if FTG_BITS == 64
+FTG_STATIC_ASSERT(sizeof(ftg_off_t)==8);
+#  else
+FTG_STATIC_ASSERT(sizeof(ftg_off_t)==4);
+#  endif
+#endif
 
 FTG_STATIC_ASSERT(sizeof(int8_t)==1);
 FTG_STATIC_ASSERT(sizeof(int16_t)==2);
@@ -457,8 +643,10 @@ FTG_STATIC_ASSERT(sizeof(int64_t)==8);
 
 /* these will fail on 16-bit segmented memory platforms. Comment them
    out if that happens. */
-FTG_STATIC_ASSERT(sizeof(intptr_t) == sizeof(ptrdiff_t));
+#ifndef FTG_CORE_NO_STDLIB
+FTG_STATIC_ASSERT(sizeof(intptr_t) == sizeof(size_t));
 FTG_STATIC_ASSERT(sizeof(uintptr_t) == sizeof(size_t));
+#endif
 
 #define FTG_ARRAY_ELEMENTS(n) (sizeof((n)) / sizeof((*n)))
 /*
@@ -484,14 +672,17 @@ FTG_STATIC_ASSERT(sizeof(uintptr_t) == sizeof(size_t));
  ftg_inline
  ftg_restrict 
 */
-    
-#if defined(__GNUC__) || defined(__clang__)
+
+
+#if defined(__GNUC__)
     #define FTG_EXT_warn_unused_result __attribute__((warn_unused_result))
     #define FTG_EXT_force_inline __attribute__((always_inline))
     #define FTG_EXT_pure_function __attribute__((pure))
     #define FTG_EXT_const_function __attribute__((const))
     #define FTG_EXT_unused __attribute__((unused))
     #define FTG_EXT_no_vtable
+    #define FTG_EXT_dllexport
+    #define FTG_EXT_dllimport
     #ifdef __cplusplus    
      	#define ftg_restrict __restrict
     #else
@@ -510,7 +701,13 @@ FTG_STATIC_ASSERT(sizeof(uintptr_t) == sizeof(size_t));
 #elif defined(_MSC_VER) && (_MSC_VER >= 1700) /* vs2012 */
 	#define ftg_restrict __restrict
     #define ftg_inline __inline
+#ifndef FTG_CORE_NO_STDIO
     #define FTG_EXT_warn_unused_result _Check_return_
+#else
+    // _Check_return_ depends on sal.h, and if windows.h can't be included,
+    // this check must go away.
+    #define FTG_EXT_warn_unused_result
+#endif
     #define FTG_EXT_force_inline __forceinline
     #define FTG_EXT_unused
     #define FTG_ATTRIBUTES(x) x
@@ -520,6 +717,11 @@ FTG_STATIC_ASSERT(sizeof(uintptr_t) == sizeof(size_t));
     #define ftg_inline __inline
     #define FTG_EXT_unused
     #define FTG_ATTRIBUTES(x) x
+#endif
+
+#if defined(_MSC_VER)
+    #define FTG_EXT_dllexport __declspec(dllexport)
+    #define FTG_EXT_dllimport __declspec(dllimport)
 #endif
 
 #ifndef FTG_EXT_warn_unused_result
@@ -560,11 +762,12 @@ FTG_STATIC_ASSERT(sizeof(uintptr_t) == sizeof(size_t));
 #endif
 
 /* fourcc */
-#ifdef FTG_LITTLE_ENDIAN
-#  define FTG_FOURCC(a,b,c,d) ((d) | ((c)<<8) | ((b)<<16) | ((a)<<24))
-#elif FTG_BIG_ENDIAN
-#  define FTG_FOURCC(a,b,c,d) ((a) | ((b)<<8) | ((c)<<16) | ((d)<<24))
-#endif
+#define FTG_FOURCC(a, b, c, d)((uint32_t)( \
+    ((uint8_t)(a) << 24) | \
+    ((uint8_t)(b) << 16) | \
+    ((uint8_t)(c) << 8)  | \
+    ((uint8_t)(d)) ))
+
 
 /* misc macros */
 	
@@ -592,6 +795,13 @@ FTG_STATIC_ASSERT(sizeof(uintptr_t) == sizeof(size_t));
 #elif defined(__APPLE__)
 #  define FTG__HAVE_MEMSET_S
 #endif
+
+typedef struct ftg_range_s {
+    uint8_t *ptr;
+    size_t size;
+} ftg_range_t;
+
+#define FTG_RANGE(x) (ftg_range_t){ &x, sizeof(x) }
 
 /*
   stopwatch -- portable, high precision start/next/stop timer
@@ -701,6 +911,11 @@ extern int __cdecl _fseeki64(FILE *, __int64, int);
 extern  __int64 __cdecl _ftelli64(FILE *);
 #endif
 
+#define FTG_KB(n)  (((u64)(n)) << 10)
+#define FTG_MB(n)  (((u64)(n)) << 20)
+#define FTG_GB(n)  (((u64)(n)) << 30)
+#define FTG_TB(n)  (((u64)(n)) << 40)
+
 
 #if defined(FTG_MALLOC) && defined(FTG_FREE) && defined(FTG_REALLOC)
 // okay
@@ -743,6 +958,7 @@ extern  __int64 __cdecl _ftelli64(FILE *);
 #define FTG_ALIGN_UP(n, a) FTG_ALIGN_DOWN((n) + (a)-1, (a))
 #define FTG_ALIGN_DOWN_PTR(p, a) ((void*)FTG_ALIGN_DOWN((uintptr_t)(p), (a)))
 #define FTG_ALIGN_UP_PTR(p, a) ((void*)FTG_ALIGN_UP((uintptr_t)(p), (a)))
+#define FTG_IS_PTR_ALIGNED(p, a) (((uintptr_t)(p) & ((a)-1)) == 0)
 
 #ifndef FTG_ARENA_OVERRIDE
 #    define FTG_ARENA_ALIGNMENT 8
@@ -757,7 +973,8 @@ struct ftg_arena_s {
 };
 
 typedef struct ftg_arena_s ftg_arena_t;
-    
+
+#ifndef FTG_CORE_NO_STDLIB
 FTGDEF void *
 ftg_malloc(size_t size, size_t num);
 
@@ -776,14 +993,8 @@ ftg_realloc(void *ptr, size_t size, size_t num);
 FTGDEF char *
 ftg_stristr(const char *haystack, const char *needle);
 
-FTGDEF FTG_EXT_warn_unused_result int
-ftg_strncpy(char *ftg_restrict dst, const char *ftg_restrict src, size_t max_copy);
-
 FTGDEF FTG_EXT_warn_unused_result char *
 ftg_strcatall(size_t num, ...);
-
-FTGDEF const char*
-ftg_strsplit(const char *str, char split_ch, size_t index, size_t *out_len);
 
 FTGDEF void
 ftg_bzero(void *ptr, size_t num);
@@ -791,12 +1002,29 @@ ftg_bzero(void *ptr, size_t num);
 FTGDEF char *
 ftg_va(const char *fmt, ...);
 
+FTGDEF char *
+ftg_get_filename_ext(const char *path);
+
+FTGDEF bool
+ftg_push_path(char *dst_path, const char *src_path, size_t max_path);
+
+FTGDEF void
+ftg_pop_path(char *dst_path);
+
+#endif
+
+FTGDEF FTG_EXT_warn_unused_result int
+ftg_strncpy(char *ftg_restrict dst, const char *ftg_restrict src, size_t max_copy);
+
 FTGDEF uint32_t
 ftg_hash_fast(const void *p, uint32_t len);
 
 FTGDEF uint32_t
-ftg_hash_number(uint32_t number);
-    
+ftg_hash_u32(uint32_t number);
+
+FTGDEF uint64_t
+ftg_hash_u64(uint64_t number);
+
 FTGDEF int
 ftg__default_assert_reporter(const char *expr, const char *filename, const char *func, unsigned int lineno);
 
@@ -834,6 +1062,7 @@ struct ftg_index_array_s {
     size_t records;  /* alloced, always > count */
 };
 
+#if FTG_DEPRECATED
 /* warning: ftg_ia api will be deprecated and moved to a container-specific header file */
 FTGDEF bool
 ftg_ia_is_init(struct ftg_index_array_s *i);
@@ -844,26 +1073,17 @@ ftg_ia_append(struct ftg_index_array_s *i, size_t index);
 FTGDEF void
 ftg_ia_prealloc(struct ftg_index_array_s *i, size_t initial_record_count);
 
-FTGDEF void
-ftg_ia_free(struct ftg_index_array_s *i);
+FTGDEF void ftg_ia_free(struct ftg_index_array_s *i);
+#endif
 
 FTGDEF const char *
 ftg_correct_dirslash(char *path);
-
-FTGDEF char *
-ftg_get_filename_ext(const char *path);
 
 FTGDEF char *
 ftg_get_filename_from_path(const char *path);
 
 FTGDEF bool
 ftg_is_dirslash(char c);
-
-FTGDEF bool
-ftg_push_path(char *dst_path, const char *src_path, size_t max_path);
-
-FTGDEF void
-ftg_pop_path(char *dst_path);
 
 #ifndef FTG_CORE_NO_STDIO
 FTGDEF FILE *
@@ -925,6 +1145,7 @@ FTGDEF void
 ftg__default_stopwatch_reporter(struct ftg_stopwatch_s *sw);
 #endif
 
+#ifndef FTG_CORE_NO_STDLIB
 FTGDEF ftg_arena_t *
 ftg_arena_new(void);
 
@@ -933,12 +1154,18 @@ ftg_arena_alloc(ftg_arena_t **arena, size_t size);
 
 FTGDEF void
 ftg_arena_free(ftg_arena_t* arena);
+#endif /* !FTG_CORE_NO_STDLIB */
 
+FTGDEF void*
+ftg_arena_alloc_fixed(ftg_arena_t *arena, size_t size);
+
+#ifndef FTG_CORE_NO_STDLIB
 FTGDEF int
 ftg_strtof(const char *str, char **endptr, float *out_float);
 
-FTGDEF int
-ftg_strtol(const char *str, char **endptr, int base, long int *out_long);
+FTGDEF int ftg_strtol(const char *str, char **endptr, int base,
+                      long int *out_long);
+#endif
 
 #ifdef __cplusplus
 }
@@ -950,7 +1177,7 @@ ftg_strtol(const char *str, char **endptr, int base, long int *out_long);
 #ifdef FTG_IMPLEMENT_CORE
 
 #ifndef FTG_CORE_NO_STDIO
-#  include <stdio.h>
+#include <stdio.h>
 #  ifdef FTG_POSIX_LIKE
 #    include <unistd.h>
 #    include <dirent.h>
@@ -968,12 +1195,17 @@ ftg_strtol(const char *str, char **endptr, int base, long int *out_long);
 #  endif
 #endif
 
-#include <ctype.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdarg.h>
-#include <math.h>
+#ifndef FTG_CORE_NO_STDLIB
+#  include <ctype.h>
+#  include <stdlib.h>
+#  include <string.h>
+#  include <stdarg.h>
+#  include <math.h>
 #include <stddef.h>
+#define FTG__NULL NULL    
+#else
+# define FTG__NULL ((void*)(0))
+#endif
 
 /* SIZE_MAX may not be defined in C++ because C++ does not know about this C99 addition. */
 #ifndef SIZE_MAX
@@ -989,8 +1221,13 @@ ftg_strtol(const char *str, char **endptr, int base, long int *out_long);
 int
 ftg__default_assert_reporter(const char *expr, const char *filename, const char *func, unsigned int lineno)
 {
-	((void)filename);
-	fprintf(stderr, "assert %s(%d)%s: %s\n", filename, lineno, func, expr);
+    FTG_UNUSED(expr);
+    FTG_UNUSED(filename);
+    FTG_UNUSED(func);
+    FTG_UNUSED(lineno);
+#ifndef FTG_CORE_NO_STDIO
+    fprintf(stderr, "assert %s(%d)%s: %s\n", filename, lineno, func, expr);
+#endif
     return 1;
 }
 
@@ -1008,7 +1245,8 @@ ftg__test_assert_reporter(const char *expr, const char *filename, const char *fu
 #endif
 
 /* memory */
-    
+
+#ifndef FTG_CORE_NO_STDLIB
 void *
 ftg_malloc(size_t size, size_t num)
 {
@@ -1088,6 +1326,7 @@ ftg_stricmp(const char *s1, const char *s2)
     
     return result;		
 }
+#endif
 
 
 /* Fill up to max_copy characters in dst, including null.  Unlike strncpy(), a null
@@ -1135,6 +1374,7 @@ ftg_strncpy(char *ftg_restrict dst, const char *ftg_restrict src, size_t max_cop
     return 0;
 }
 
+#ifndef FTG_CORE_NO_STDLIB
 /* case insensitive strstr */
 char *
 ftg_stristr(const char *haystack, const char *needle)
@@ -1194,7 +1434,7 @@ ftg_strcatall(size_t num, ...)
     buf[alloc_size-1] = '\0';
     return buf;
 }
-
+#endif
 
 /* split *str on split_chr, returing the split number 'index'.
    index 0 = beginning of string, NULL when index exceeds number of splits
@@ -1221,7 +1461,7 @@ ftg_strsplit(const char *str, char split_ch, size_t index, size_t *len) {
     // hit end of string; requested index does not exist
     if (!*p) {
         if (len) *len = 0;
-        return NULL;
+        return FTG__NULL;
     }
 
     p++;
@@ -1238,7 +1478,7 @@ find_next_split:
     return p;
 }
 
-
+#ifndef FTG_CORE_NO_STDLIB
 /* avoids memset argument order confusion for most common use case,
    guards against 0 num, works on platforms that don't have bzero,
    can't be optimized away. */
@@ -1304,6 +1544,8 @@ ftg_va(const char *fmt, ...)
 
     return buf;
 }
+#endif /* FTG_CORE_NO_STDLIB */
+
 
 /* in-place swapping of slashes to match executing platform's
    directory slash order.  returns a pointer to *path
@@ -1329,6 +1571,7 @@ const char *ftg_correct_dirslash(char *path)
     return path;
 }
 
+#ifndef FTG_CORE_NO_STDLIB
 /* get extension of the filename, not including the '.' */
 FTGDEF char *
 ftg_get_filename_ext(const char *path)
@@ -1367,14 +1610,16 @@ ftg_get_filename_from_path(const char *path)
 
     return (char*)path;
 }
+    #endif /* FTG_CORE_NO_STDLIB */
 
 /* cross-environment dir slash check */
-FTGDEF ftg_inline bool
+FTGDEF bool
 ftg_is_dirslash(char c)
 {
     return (c == '/' || c == '\\');
 }
 
+#ifndef FTG_CORE_NO_STDLIB
 /* append a directory to a path, separated by a directory slash ('/' or '\')
    return true if truncation occurs */
 FTGDEF bool
@@ -1482,6 +1727,8 @@ ftg_pop_path(char *dst_path)
 
     dst_path[length] = '\0';
 }
+#endif
+
 
 /* read a file into a memory buffer.  clear the memory with ftg_free.
    if make_string is true, a null terminator is attached.
@@ -1490,6 +1737,8 @@ ftg_pop_path(char *dst_path)
    return is non-NULL, otherwise it is unchanged.
 
    Uses 64-bit file routines internally.
+
+   FIXME: this is broken for empty 0 byte files
 */
 #ifndef FTG_CORE_NO_STDIO
 FTGDEF uint8_t *
@@ -1508,7 +1757,7 @@ ftg_file_read(const char *path, bool make_string, ftg_off_t *len)
     file_len = ftg_ftell64(fp);
     ftg_fseek64(fp, 0L, SEEK_SET);
 
-    out_size = make_string ? file_len+1 : file_len;
+    out_size = (ftg_off_t)(make_string ? file_len+1 : file_len);
 
 #ifdef _MSC_VER    
 #  pragma warning(push)
@@ -1531,14 +1780,16 @@ ftg_file_read(const char *path, bool make_string, ftg_off_t *len)
     size = (size_t)out_size;
     
     buf = (unsigned char*)FTG_MALLOC(sizeof(unsigned char), size);
-    if (!buf)
+    if (!buf) {
+        fclose(fp);
         return NULL;
+    }
 
     num_elements = fread(buf, (size_t)file_len, 1, fp);
+    fclose(fp);
+
     if (num_elements != 1)
         goto fail;
-
-    fclose(fp);
 
     if (make_string)
         buf[size-1] = '\0';
@@ -1715,6 +1966,7 @@ ftg_u8_strlen(const char *s)
     return j;
 }
 
+#if FTG_DEPRECATED
 bool
 ftg_ia_is_init(struct ftg_index_array_s *i)
 {
@@ -1774,6 +2026,7 @@ ftg_ia_free(struct ftg_index_array_s *i)
         FTG_FREE(i->indices);
     i->records = i->count = 0;
 }
+#endif
 
 /* portable 64-bit UTF-8 file routines */
 #ifndef FTG_CORE_NO_STDIO
@@ -1905,7 +2158,7 @@ ftg_ftell64(FILE *stream)
         FTG_ASSERT_FAIL(fail_reason);
     }
 #endif    
-    return tell;
+    return (ftg_off_t)tell;
 
 #else
 
@@ -1916,7 +2169,7 @@ ftg_ftell64(FILE *stream)
 #  endif
 
     FTG_ASSERT(tell >= 0);
-    return tell;
+    return (ftg_off_t)tell;
 #endif
 }
 
@@ -2270,9 +2523,14 @@ ftg_alloc_console(void)
     // enable ansi codes
     handle_stdout = GetStdHandle(STD_OUTPUT_HANDLE);
     GetConsoleMode(handle_stdout, &mode);
+
+    // these defines not available in windows 8 toolset
+#ifdef ENABLE_VIRTUAL_TERMINAL_PROCESSING    
     mode |= ENABLE_VIRTUAL_TERMINAL_PROCESSING;
     mode |= DISABLE_NEWLINE_AUTO_RETURN;
     SetConsoleMode(handle_stdout, mode);
+#endif
+
 #endif
 }
 
@@ -2310,7 +2568,7 @@ ftg_hash_fast(const void *p, uint32_t len)
     unsigned char *q = (unsigned char *) p;
     uint32_t hash = len;
 
-    if (len <= 0 || q == NULL) return 0;
+    if (len <= 0 || q == FTG__NULL) return 0;
 
     /* Main loop */
     if (((size_t) q & 1) == 0) {
@@ -2363,7 +2621,7 @@ ftg_hash_fast(const void *p, uint32_t len)
 }
 
 FTGDEF uint32_t
-ftg_hash_number(uint32_t hash)
+ftg_hash_u32(uint32_t hash)
 {
     hash ^= hash << 3;
     hash += hash >> 5;
@@ -2375,12 +2633,21 @@ ftg_hash_number(uint32_t hash)
     return hash;
 }
 
-
+FTGDEF uint64_t
+ftg_hash_u64(uint64_t hash)
+{
+    hash ^= hash >> 33;
+    hash *= 0xff51afd7ed558ccdULL;
+    hash ^= hash >> 33;
+    hash *= 0xc4ceb9fe1a85ec53ULL;
+    hash ^= hash >> 33;
+    return hash;
+}
 
 
 /* stopwatch (code timing routines) */
 
-#ifdef FTG_ENABLE_STOPWATCH
+#if defined(FTG_ENABLE_STOPWATCH) && !defined(FTG_CORE_NO_STDLIB)
 
 #ifdef _WIN32
 #  define WIN32_LEAN_AND_MEAN
@@ -2583,13 +2850,14 @@ ftg__default_stopwatch_reporter(struct ftg_stopwatch_s *sw)
 
 #endif /* FTG_ENABLE_STOPWATCH */
 
+#ifndef FTG_CORE_NO_STDLIB
 static void
 ftg__arena_grow(ftg_arena_t** arena, size_t min_size)
 {
     size_t       size;
     ftg_arena_t* a = *arena;
 
-    if (a->ptr != NULL) {
+    if (a->ptr != FTG__NULL) {
         ftg_arena_t* new_block = (ftg_arena_t*)FTG_MALLOC(sizeof(ftg_arena_t), 1);
 
         new_block->prev = a;
@@ -2623,20 +2891,23 @@ ftg_arena_alloc(ftg_arena_t** arena, size_t size)
     return ptr;
 }
 
-ftg_arena_t*
+    ftg_arena_t*
 ftg_arena_new(void)
 {
-    ftg_arena_t* arena = (ftg_arena_t*)FTG_MALLOC(sizeof(ftg_arena_t), 1);
-    ftg_bzero(arena, sizeof(ftg_arena_t));
+    ftg_arena_t *arena = (ftg_arena_t *)FTG_MALLOC(sizeof(ftg_arena_t), 1);
+
+    // stop zeroing arenas and pre-committing before use
+    //ftg_bzero(arena, sizeof(ftg_arena_t));
 
     return arena;
 }
 
+    // delete all pages in the arenea
 void
 ftg_arena_free(ftg_arena_t* arena)
 {
     ftg_arena_t *prev;
-    
+
     while (arena) {
         if (arena->start) {
             FTG_FREE(arena->start);
@@ -2648,6 +2919,28 @@ ftg_arena_free(ftg_arena_t* arena)
     }
 }
 
+#endif
+
+// fixed arena alloc -- return NULL instead of reallocating
+void *
+ftg_arena_alloc_fixed(ftg_arena_t *arena, size_t size)
+{
+    void* ptr;
+    if (size > (size_t)(arena->end - arena->ptr)) {
+        FTG_ASSERT_FAIL("oom");
+        return FTG__NULL;
+    }
+
+    ptr = arena->ptr;
+    arena->ptr = (uint8_t*)FTG_ALIGN_UP_PTR(arena->ptr + size, FTG_ARENA_ALIGNMENT);
+    FTG_ASSERT(arena->ptr <= arena->end);
+    FTG_ASSERT(ptr == FTG_ALIGN_DOWN_PTR(ptr, FTG_ARENA_ALIGNMENT));
+
+    return ptr;
+}
+
+
+#ifndef FTG_CORE_NO_STDLIB
 // ftg_strtof wraps strtof, returning 0 on success.
 // out_float is assigned either way.
 int
@@ -2686,8 +2979,8 @@ ftg_strtol(const char *str, char **endptr, int base, long int *out_long) {
         *endptr = end;
 
     return 0;
-    
 }
+#endif
 
 /* test suite
  
@@ -2943,8 +3236,8 @@ static int ftg__test_file_rw(void)
     return ftgt_test_errorlevel();    
 }
 
-static int ftg__test_ia(void)
-{
+static int ftg__test_ia(void) {
+#ifdef FTG_DEPRECATED
     struct ftg_index_array_s ia = FTG_IA_INIT_ZERO;
     size_t i;
     FTGT_ASSERT(!ftg_ia_is_init(&ia));
@@ -2963,6 +3256,7 @@ static int ftg__test_ia(void)
     }
 
     ftg_ia_free(&ia);
+#endif
 
     return ftgt_test_errorlevel();    
 }
@@ -3205,6 +3499,51 @@ static int ftg__test_arena(void)
     return ftgt_test_errorlevel();
 }
 
+FTG_STATIC_ARRAY_NAMED_DECL(int, ftg_, 10);
+static int ftg__test_static_array(void)
+{
+    size_t i;
+    array_ftg_ vals;
+    FTG_STATIC_ARRAY_INIT(vals, 10);
+    FTGT_ASSERT(vals.count == 0);
+#if FTG_DEBUG
+    FTGT_ASSERT(vals.capacity == 10);
+#endif
+
+    for (i = 0; i < 10; i++) {
+        FTG_STATIC_ARRAY_APPEND(vals, (int)i);
+    }
+
+    FTGT_ASSERT(vals.count == 10);
+
+    FTG_STATIC_ARRAY_REMOVE(vals, 2, 1);
+
+    FTGT_ASSERT(vals.count == 8);
+    FTGT_ASSERT(vals.ptr[0] == 0);
+    FTGT_ASSERT(vals.ptr[1] == 3);
+    FTGT_ASSERT(vals.ptr[2] == 4);
+    FTGT_ASSERT(vals.ptr[3] == 5);
+
+    FTG_STATIC_ARRAY_INIT(vals, 10);
+    FTGT_ASSERT(vals.count == 0);
+    for (i = 0; i < 10; i++) {
+        FTG_STATIC_ARRAY_APPEND(vals, (int)i);
+    }
+
+    FTGT_ASSERT(vals.count == 10);
+    FTG_STATIC_ARRAY_REMOVE(vals, 1, 0);
+    FTGT_ASSERT(vals.count == 9);
+
+    FTG_STATIC_ARRAY_INIT(vals, 10);
+    for (i = 0; i < 10; i++) {
+        FTG_STATIC_ARRAY_APPEND(vals, (int)i);
+    }
+
+    FTG_STATIC_ARRAY_REMOVE(vals, 10, 0);
+
+    return ftgt_test_errorlevel();
+}
+
 FTGDEF
 void ftg_decl_suite(void)
 {
@@ -3226,6 +3565,7 @@ void ftg_decl_suite(void)
     FTGT_ADD_TEST(suite, ftg__test_pop_path);
     FTGT_ADD_TEST(suite, ftg__test_strsplit);
     FTGT_ADD_TEST(suite, ftg__test_arena);
+    FTGT_ADD_TEST(suite, ftg__test_static_array);
 }
 
 
