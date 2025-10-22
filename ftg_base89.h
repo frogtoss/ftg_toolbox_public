@@ -406,11 +406,6 @@ b89_iter_next(b89_iter_t* it)
     return 0;
 }
 
-#    define B89__MIN(a, b) ((a) < (b) ? (a) : (b))
-
-#    define B89__CLAMP(x, xmin, xmax)                                          \
-        ((x) < (xmin) ? (xmin) : (x) > (xmax) ? (xmax) : (x))
-
 B89DEF void
 b89_pack(unsigned int index, B89_CHAR* out_bytes)
 {
