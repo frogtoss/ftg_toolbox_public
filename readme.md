@@ -2,6 +2,13 @@
 
 Single C file libraries for C or C++, written by Frogtoss Games, and made public.
 
+## ftg_base89 ##
+
+[ftg_bitbuffer.h](https://github.com/frogtoss/ftg_toolbox_public/blob/main/ftg_base89.h)
+
+An implementation of [Printable Base89 Lut Encoding](https://www.frogtoss.com/labs/printable-base89-lut-encoding.html) in C.
+
+This header file lets you encode lookup tables into UTF-8 strings, which you can use for your own purposes including theming or semantic markup.  It includes a reasonably high performance set of functions to process strings containing these encodings, as well as pack and unpack Base89 LUT Encoded sequences.
 
 ## ftg_bitbuffer ##
 
