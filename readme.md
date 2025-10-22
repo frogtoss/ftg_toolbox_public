@@ -4,7 +4,7 @@ Single C file libraries for C or C++, written by Frogtoss Games, and made public
 
 ## ftg_base89 ##
 
-[ftg_bitbuffer.h](https://github.com/frogtoss/ftg_toolbox_public/blob/main/ftg_base89.h)
+[ftg_base89.h](https://github.com/frogtoss/ftg_toolbox_public/blob/main/ftg_base89.h)
 
 An implementation of [Printable Base89 Lut Encoding](https://www.frogtoss.com/labs/printable-base89-lut-encoding.html) in C.
 
